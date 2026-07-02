@@ -1,0 +1,33 @@
+name: Sync pages to Cloudflare R2
+
+# Mirrors pages/ to Cloudflare R2 from GitHub's runners (which can reach the R2 S3
+# endpoint — the build machine's ISP SNI-blocks it). Runs on a schedule and on demand.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */2 * * *"
+
+concurrency:
+  group: r2-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync webp pages to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          aws s3 mb "s3://${R2_BUCKET}" --endpoint-url "${R2_ENDPOINT}" || true
+          aws s3 sync pages "s3://${R2_BUCKET}/pages" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --content-type image/webp \
+            --cache-control "public, max-age=31536000, immutable" \
+            --size-only --no-progress
+          echo "R2 sync complete: $(date -u)"
