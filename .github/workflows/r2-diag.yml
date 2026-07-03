@@ -1,0 +1,22 @@
+name: R2 + CF diagnostics
+on: workflow_dispatch
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Diagnose R2 endpoint TLS + CF token from GitHub network
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          ACCT: "85b7aea48f66e084cf64ed6da3de9a85"
+        run: |
+          HOST="${ACCT}.r2.cloudflarestorage.com"
+          echo "===== 1) TLS handshake to R2 S3 endpoint (curl -v) ====="
+          curl -sv --max-time 25 "https://${HOST}/" 2>&1 | grep -iE "Connected|SSL|TLS|subject|issuer|handshake|HTTP/|error" | head -20 || true
+          echo "===== 2) openssl s_client ====="
+          echo | timeout 20 openssl s_client -connect "${HOST}:443" -servername "${HOST}" 2>&1 | grep -iE "CONNECTED|subject|issuer|Cipher is|Verify|alert|handshake" | head -8 || true
+          echo "===== 3) CF token: list accounts (from GitHub IP) ====="
+          curl -s --max-time 20 "https://api.cloudflare.com/client/v4/accounts" -H "Authorization: Bearer ${CF_API_TOKEN}" | head -c 400; echo
+          echo "===== 4) CF token: list R2 buckets ====="
+          curl -s --max-time 20 "https://api.cloudflare.com/client/v4/accounts/${ACCT}/r2/buckets" -H "Authorization: Bearer ${CF_API_TOKEN}" | head -c 400; echo
+          echo "===== 5) CF token: list zones (for DNS) ====="
+          curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones" -H "Authorization: Bearer ${CF_API_TOKEN}" | head -c 400; echo
